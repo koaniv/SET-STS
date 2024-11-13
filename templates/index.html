@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Servo Control Interface</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <style>
+        body {
+            padding: 20px;
+        }
+        #log {
+            height: 150px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Servo Control Interface</h1>
+
+        <!-- Step 1: Connect to Port -->
+        <h3>Step 1: Select Port and Connect</h3>
+        <div class="form-group">
+            <label for="portSelect">Available Ports:</label>
+            <select id="portSelect" class="form-control"></select>
+            <button id="connectButton" class="btn btn-primary mt-2">Connect</button>
+        </div>
+
+        <!-- Step 2: Select Servo and Change ID -->
+        <h3>Step 2: Select Servo and Change ID</h3>
+        <div class="form-group">
+            <label for="servoSelect">Connected Servos:</label>
+            <select id="servoSelect" class="form-control"></select>
+            <div class="form-inline mt-2">
+                <input type="number" id="newIdInput" class="form-control mr-2" placeholder="New ID">
+                <button id="changeIdButton" class="btn btn-warning">Change ID</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Move Servo -->
+        <h3>Step 3: Move Servo</h3>
+        <div class="form-group">
+            <label for="angleInput">Angle:</label>
+            <input type="number" id="angleInput" class="form-control" placeholder="Enter angle">
+            <button id="moveButton" class="btn btn-success mt-2">Move Servo</button>
+        </div>
+
+        <!-- Log Section -->
+        <h3>Log</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        var socket = io.connect('http://127.0.0.1:5000');
+
+        // Function to fetch available ports
+        function fetchPorts() {
+            fetch('/scan_ports')
+                .then(response => response.json())
+                .then(data => {
+                    var portSelect = document.getElementById('portSelect');
+                    portSelect.innerHTML = '';
+                    data.forEach(port => {
+                        var option = document.createElement('option');
+                        option.value = port;
+                        option.textContent = port;
+                        portSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error fetching ports:', error));
+        }
+
+        // Function to fetch and update the servo list
+        function fetchServoList() {
+            fetch('/get_servo_info')
+                .then(response => response.json())
+                .then(data => {
+                    var servoSelect = document.getElementById('servoSelect');
+                    servoSelect.innerHTML = '';
+                    data.forEach(servo => {
+                        var option = document.createElement('option');
+                        option.value = servo.id;
+                        option.textContent = `Servo ID: ${servo.id} - Model: ${servo.model_number}`;
+                        servoSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error fetching servo list:', error));
+        }
+
+        // Listener for refresh_servo_list event
+        socket.on('refresh_servo_list', function() {
+            fetchServoList();
+        });
+
+        // Listener for log messages
+        socket.on('log', function(data) {
+            var log = document.getElementById('log');
+            log.innerHTML += data.message + '<br>';
+            log.scrollTop = log.scrollHeight;
+        });
+
+        // Connect button click handler
+        document.getElementById('connectButton').addEventListener('click', function() {
+            var port = document.getElementById('portSelect').value;
+            fetch('/connect_port', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port: port })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Connected successfully');
+                    fetchServoList();  // Fetch the servo list after connecting
+                } else {
+                    alert('Failed to connect');
+                }
+            });
+        });
+
+        // Change ID button click handler
+        document.getElementById('changeIdButton').addEventListener('click', function() {
+            var oldId = document.getElementById('servoSelect').value;
+            var newId = document.getElementById('newIdInput').value;
+            fetch('/change_servo_id', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old_id: oldId, new_id: newId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Servo ID changed successfully');
+                    fetchServoList();  // Refresh the servo list after changing the ID
+                } else {
+                    alert('Failed to change Servo ID: ' + data.error);
+                }
+            });
+        });
+
+        // Move button click handler
+        document.getElementById('moveButton').addEventListener('click', function() {
+            var servoId = document.getElementById('servoSelect').value;
+            var angle = document.getElementById('angleInput').value;
+            fetch('/move_servo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ servo_id: servoId, angle: angle })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Servo moved successfully');
+                } else {
+                    alert('Failed to move Servo');
+                }
+            });
+        });
+
+        // Initial fetch of available ports
+        fetchPorts();
+    </script>
+</body>
+</html>
